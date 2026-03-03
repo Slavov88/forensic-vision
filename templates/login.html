@@ -1,0 +1,55 @@
+{% load static %}<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход – ForensicVision</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=1.1">
+  <script>
+    if (localStorage.getItem('theme') === 'light' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+      document.documentElement.classList.add('theme-light');
+    }
+  </script>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-box">
+    <div class="login-box__logo">
+      <div style="font-size:2.5rem;">🔬</div>
+      <h1>ForensicVision</h1>
+      <p>Криминалистичен анализ на документи</p>
+    </div>
+
+    {% if form.errors %}
+      <div class="alert alert--danger">Грешно потребителско име или парола.</div>
+    {% endif %}
+
+    <form method="post" id="login-form">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label" for="id_username">Потребителско име</label>
+        <input class="form-control" type="text" id="id_username" name="username"
+               autocomplete="username" autofocus required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="id_password">Парола</label>
+        <input class="form-control" type="password" id="id_password" name="password"
+               autocomplete="current-password" required>
+      </div>
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+      <button type="submit" class="btn btn--primary" style="width:100%;justify-content:center;margin-top:.5rem;">
+        Влез в системата
+      </button>
+    </form>
+    
+    <div style="text-align:center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--color-muted);">
+      Нямате профил? <a href="{% url 'register' %}">Регистрирайте се</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Кейсове – ForensicVision{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-header__title">Кейсове</h1>
+    <p class="page-header__subtitle">Всички разследвания, до които имате достъп</p>
+  </div>
+  <a href="{% url 'case-create' %}" class="btn btn--primary">+ Нов кейс</a>
+</div>
+
+
+<div class="card">
+  {% if cases %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Заглавие</th>
+            <th>Статус</th>
+            <th>Създаден от</th>
+            <th>Дата</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for case in cases %}
+          <tr>
+            <td>
+              <a href="{% url 'case-detail' case.pk %}">{{ case.title }}</a>
+            </td>
+            <td>
+              {% if case.status == 'draft' %}
+                <span class="badge badge--draft">Чернова</span>
+              {% elif case.status == 'in_review' %}
+                <span class="badge badge--review">В преглед</span>
+              {% else %}
+                <span class="badge badge--final">Финален</span>
+              {% endif %}
+            </td>
+            <td>{{ case.created_by.get_username }}</td>
+            <td>{{ case.created_at|date:"d.m.Y" }}</td>
+            <td>
+              <a href="{% url 'case-detail' case.pk %}" class="btn btn--ghost btn--sm">Отвори →</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state__icon">📁</div>
+      <p>Нямате кейсове. Създайте първия си кейс чрез бутона по-горе.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Нов Кейс – ForensicVision{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-header__title">Създаване на нов кейс</h1>
+    <p class="page-header__subtitle">Въведете основна информация за разследването</p>
+  </div>
+</div>
+
+<div class="card" style="max-width: 600px; margin: 0 auto; padding: 2rem;">
+  {% if error %}
+    <div style="background-color: var(--color-danger); color: white; padding: 1rem; border-radius: var(--radius); margin-bottom: 1.5rem;">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'case-create' %}">
+    {% csrf_token %}
+    
+    <div style="margin-bottom: 1.5rem;">
+      <label for="title" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Заглавие на кейса *</label>
+      <input type="text" id="title" name="title" class="form-control" required style="width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius); padding: 0.75rem;">
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+      <label for="description" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Описание (по избор)</label>
+      <textarea id="description" name="description" class="form-control" rows="4" style="width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius); padding: 0.75rem;"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+      <label for="tags" style="display: block; font-weight: 500; margin-bottom: 0.5rem;">Тагове (по избор)</label>
+      <input type="text" id="tags" name="tags" class="form-control" placeholder="напр: fraud, 2024, urgent (разделени със запетая)" style="width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius); padding: 0.75rem;">
+    </div>
+    
+    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+      <a href="{% url 'case-list' %}" class="btn btn--ghost">Отказ</a>
+      <button type="submit" class="btn btn--primary">Създай кейс</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

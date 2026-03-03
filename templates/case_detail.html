@@ -1,0 +1,925 @@
+{% extends "base.html" %}
+{% block title %}{{ case.title }} – ForensicVision{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Tooltip system */
+.tooltip-trigger { position: relative; cursor: pointer; color: var(--color-primary); display: inline-block; transition: opacity 0.2s; }
+.tooltip-trigger:hover { opacity: 1 !important; }
+.tooltip-content {
+  display: none;
+  position: absolute;
+  bottom: 150%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e2e;
+  color: #e0e0e0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  width: 220px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  z-index: 2000;
+  border: 1px solid rgba(255,255,255,0.1);
+  pointer-events: none;
+  line-height: 1.4;
+  text-transform: none;
+  font-weight: 400;
+}
+.tooltip-content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -6px;
+  border-width: 6px;
+  border-style: solid;
+  border-color: #1e1e2e transparent transparent transparent;
+}
+.tooltip-trigger:hover .tooltip-content,
+.tooltip-trigger.active .tooltip-content {
+  display: block;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-header__title">{{ case.title }}</h1>
+    <p class="page-header__subtitle">
+      {% if case.status == 'draft' %}<span class="badge badge--draft">Чернова</span>
+      {% elif case.status == 'in_review' %}<span class="badge badge--review">В преглед</span>
+      {% else %}<span class="badge badge--final">Финален</span>{% endif %}
+      &nbsp;· Роля:
+      {% if role == 'owner' or role == 'admin' %}<span class="badge badge--owner">{{ role }}</span>
+      {% elif role == 'editor' %}<span class="badge badge--editor">Редактор</span>
+      {% else %}<span class="badge badge--viewer">Наблюдател</span>{% endif %}
+    </p>
+  </div>
+  <a href="{% url 'case-list' %}" class="btn btn--ghost btn--sm">← Всички кейсове</a>
+</div>
+
+{% if case.description %}
+  <div class="card" style="padding:1rem 1.5rem; margin-bottom:1.25rem;">
+    <p style="color:var(--color-muted); font-size:.9rem;">{{ case.description }}</p>
+  </div>
+{% endif %}
+
+<div class="tabs">
+  <a href="#dokazatelstva" class="tabs__link active" onclick="showTab('dokazatelstva',this)">📎 Доказателства</a>
+  <a href="#analizi"       class="tabs__link"        onclick="showTab('analizi',this)">🔍 Анализи</a>
+  <a href="#komentari"     class="tabs__link"        onclick="showTab('komentari',this)">💬 Коментари</a>
+  {% if can_edit %}<a href="#spodelqne" class="tabs__link" onclick="showTab('spodelqne',this)">🔗 Споделяне</a>{% endif %}
+</div>
+
+<div id="tab-dokazatelstva">
+  <div class="card">
+    <div class="card__header">
+      <span class="card__title">Доказателства ({{ evidence|length }})</span>
+      {% if can_edit %}
+        <button class="btn btn--outline btn--sm" onclick="toggleUploadForm()">📁 Качи файл</button>
+      {% endif %}
+    </div>
+
+    {% if can_edit %}
+    <div id="upload-form-panel" style="display:none; padding:1.25rem; border-bottom:1px solid var(--color-border); background:rgba(255,255,255,0.02);">
+       <form id="upload-form" onsubmit="uploadEvidence(event)" style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+          <div class="form-group" style="margin-bottom:0; flex:1; min-width:200px;">
+            <label class="form-label">Изберете файл (PDF/Image)</label>
+            <input type="file" id="ev-file" class="form-control" required>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:.85rem; color:var(--color-muted); display:flex; align-items:center; gap:5px; cursor:pointer;">
+              <input type="checkbox" id="ev-ref-tag"> Маркирай като Еталон
+            </label>
+          </div>
+          <button type="submit" class="btn btn--primary">Качи</button>
+       </form>
+    </div>
+    {% endif %}
+    {% if evidence %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Файл</th><th>Тип</th><th>SHA-256</th><th>Качен от</th><th>Дата</th><th>Страници</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ev in evidence %}
+            <tr>
+              <td>
+                <a href="{% url 'evidence-detail' ev.pk %}" target="_blank" rel="noopener" style="font-weight:600;">
+                  {{ ev.original_file.name|slice:"15:" }} <span style="font-size:0.65rem; color:var(--color-muted);">Преглед ↗</span>
+                </a>
+                {% if ev.is_reference %}<span class="badge badge--owner" style="font-size:.65rem;padding:2px 4px;margin-left:4px;">Еталон</span>{% endif %}
+              </td>
+              <td><span class="badge badge--{% if ev.type == 'pdf' %}draft{% else %}viewer{% endif %}">{{ ev.type|upper }}</span></td>
+              <td style="font-family:monospace;font-size:.75rem;">{{ ev.sha256|slice:":16" }}…</td>
+              <td>{{ ev.uploaded_by.get_username }}</td>
+              <td>{{ ev.uploaded_at|date:"d.m.Y H:i" }}</td>
+              <td>{{ ev.pages.count }}</td>
+              <td>
+                {% if can_edit %}
+                  <button class="btn btn--ghost btn--sm" onclick="toggleReference('{{ ev.pk }}', {% if ev.is_reference %}false{% else %}true{% endif %})">
+                    {% if ev.is_reference %}➖ Премахни еталон{% else %}➕ Задай като еталон{% endif %}
+                  </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state__icon">📄</div>
+        <p>Няма качени доказателства. Качете първия файл чрез бутона по-горе.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="tab-analizi" style="display:none;">
+  <div class="card">
+    <div class="card__header">
+      <span class="card__title">Задачи за анализ ({{ jobs|length }})</span>
+      {% if can_edit %}
+        <div style="display:flex;gap:.5rem;">
+          <button class="btn btn--outline btn--sm" onclick="toggleAnalysisForm()">🚀 Пусни анализ</button>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if can_edit %}
+    <div id="analysis-form-panel" style="display:none; padding:1.25rem; border-bottom:1px solid var(--color-border); background:rgba(255,255,255,0.02);">
+       <div style="max-width:600px;">
+          <div class="form-group">
+            <label class="form-label">Изберете тип анализ</label>
+            <select id="analysis-pipeline" class="form-control" onchange="updateFormFields()">
+              <option value="general_scan">📊 Общо сканиране (General Scan)</option>
+              <option value="layout_consistency">📐 Консистентност на оформлението (Layout Scan)</option>
+              <option value="compare_reference">🔍 Сравнение с еталон (Compare)</option>
+              <option value="handwriting_compare">✍️ Сравнение на почерк (Handwriting)</option>
+            </select>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:1rem;">
+            <!-- Target Section -->
+            <div>
+              <label class="form-label">Обект за анализ</label>
+              <select id="analysis-target" class="form-control" onchange="updateTargetPages()">
+                <option value="">-- Изберете файл --</option>
+                {% for ev in evidence %}
+                  <option value="{{ ev.pk }}" data-type="{{ ev.type }}" data-pages="{{ ev.pages.count }}">{{ ev.original_file.name|slice:"30:" }}</option>
+                {% endfor %}
+              </select>
+              <select id="analysis-target-page" class="form-control" style="margin-top:.5rem;">
+                <option value="">Всички страници</option>
+              </select>
+            </div>
+
+            <!-- Reference Section (only for compare) -->
+            <div id="ref-selection-box" style="display:none;">
+              <!-- ROI -->
+                  <div id="roi-box" style="margin-top:.75rem; display:none; background:rgba(255,255,255,0.03); padding:.75rem; border-radius:4px;">
+                    <div style="font-size:.7rem; font-weight:600; text-transform:uppercase; margin-bottom:8px; color:var(--color-primary); display:flex; justify-content:space-between;">
+                      <span>Зона за интерес (ROI)</span>
+                      <label style="font-weight:400; text-transform:none; cursor:pointer;"><input type="checkbox" id="enable-roi" onchange="toggleRoiFields()"> Активирай</label>
+                    </div>
+                    <div id="roi-fields" style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; opacity:0.5; pointer-events:none;">
+                      <div>
+                        <label style="font-size:.65rem; color:var(--color-muted);">X (px)</label>
+                        <input type="number" id="roi-x" class="form-input" style="padding:4px; font-size:.8rem;" value="0">
+                      </div>
+                      <div>
+                        <label style="font-size:.65rem; color:var(--color-muted);">Y (px)</label>
+                        <input type="number" id="roi-y" class="form-input" style="padding:4px; font-size:.8rem;" value="0">
+                      </div>
+                      <div>
+                        <label style="font-size:.65rem; color:var(--color-muted);">Ширина (W)</label>
+                        <input type="number" id="roi-w" class="form-input" style="padding:4px; font-size:.8rem;" value="500">
+                      </div>
+                      <div>
+                        <label style="font-size:.65rem; color:var(--color-muted);">Височина (H)</label>
+                        <input type="number" id="roi-h" class="form-input" style="padding:4px; font-size:.8rem;" value="500">
+                      </div>
+                    </div>
+                  </div>
+              <label class="form-label">Еталон (Reference)</label>
+              <select id="analysis-ref" class="form-control" onchange="updateRefPages()">
+                <option value="">-- Изберете еталон --</option>
+                {% for ev in evidence %}
+                  {% if ev.is_reference %}
+                    <option value="{{ ev.pk }}" data-type="{{ ev.type }}" data-pages="{{ ev.pages.count }}">{{ ev.original_file.name|slice:"30:" }}</option>
+                  {% endif %}
+                {% endfor %}
+              </select>
+              <select id="analysis-ref-page" class="form-control" style="margin-top:.5rem;">
+                <option value="0">Страница 1</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top:1.5rem;">
+            <button class="btn btn--primary" onclick="launchAnalysis()">Стартирай анализ</button>
+          </div>
+       </div>
+    </div>
+    {% endif %}
+
+    {% if jobs %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Област / Страница</th><th>Pipeline</th><th>Статус</th><th>Прогрес</th><th>Стартиран</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for job in jobs %}
+            <tr id="job-row-{{ job.pk }}">
+              <td>
+                <div style="font-weight:600; font-size:.85rem;">{{ job.evidence.original_file.name|slice:"30:" }}</div>
+                <div style="font-size:.7rem; color:var(--color-muted);">
+                  {% if job.page %}Стр. {{ job.page.page_index|add:1 }}{% else %}Всички страници{% endif %}
+                  {% if job.pipeline_name == 'compare_reference' %}
+                    &nbsp;· Еталон: Стр. {{ job.params_json.reference_page_index|add:1 }} (ID: {{ job.params_json.reference_evidence_id }})
+                  {% endif %}
+                </div>
+              </td>
+              <td style="font-size:.85rem;">{{ job.pipeline_name }}</td>
+              <td>
+                <span class="badge badge--{{ job.status }}">
+                  {% if job.status == 'queued' %}Опашка
+                  {% elif job.status == 'running' %}Изпълнение
+                  {% elif job.status == 'done' %}Готов
+                  {% else %}Грешка{% endif %}
+                </span>
+              </td>
+                <td>
+                  <div class="progress" style="width:60px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                    <div class="progress__fill bg-primary" data-width="{{ job.progress|default:0 }}%" style="height:4px;"></div>
+                    <script>
+                      // Mini script to apply dynamic width safely avoiding strict CSS linters
+                      document.querySelectorAll('.progress__fill[data-width]').forEach(el => {
+                        el.style.width = el.getAttribute('data-width');
+                      });
+                    </script>
+                  </div>
+                </td>
+              <td style="font-size:.85rem;">{{ job.started_at|date:"H:i"|default:"—" }}</td>
+              <td>
+                <button class="btn btn--ghost btn--sm" onclick="toggleResult('{{ job.pk }}')">
+                  {% if job.status == 'done' %}Резултати →{% else %}Детайли{% endif %}
+                </button>
+              </td>
+            </tr>
+            <tr id="result-{{ job.pk }}" style="display:none; background:rgba(0,0,0,0.1);">
+              <td colspan="6" style="padding:1.5rem;">
+                {% if job.status == 'failed' %}
+                  <p class="alert alert--danger">{{ job.error_message }}</p>
+                {% elif job.status == 'done' %}
+                  <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1.5rem;">
+                    <!-- Metrics -->
+                    <div>
+                      <h4 style="margin-bottom:.75rem;">Анализ и Метрики</h4>
+                      {% for art in job.artifacts.all %}
+                        {% if art.kind == 'metrics' %}
+                          <div style="font-size:.85rem; background:rgba(0,0,0,0.2); padding:1.25rem; border-radius:4px; border:1px solid rgba(255,255,255,0.05);">
+                            
+                            <!-- Summary & Badges -->
+                            {% if art.data_json.summary %}
+                              <div style="display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+                                {% if art.data_json.summary.quality_level %}
+                                <div class="badge badge--{% if art.data_json.summary.quality_level == 'Отлично' or art.data_json.summary.quality_level == 'Excellent' %}viewer{% elif art.data_json.summary.quality_level == 'Добро' or art.data_json.summary.quality_level == 'Good' %}owner{% else %}danger{% endif %}" style="font-size:.7rem; padding:4px 8px;">
+                                  КАЧЕСТВО: {{ art.data_json.summary.quality_level|upper }}
+                                </div>
+                                {% endif %}
+                                
+                                {% if art.data_json.pipeline == 'handwriting_compare' %}
+                                  <div class="badge badge--{% if art.data_json.summary.consistency_color == 'success' %}viewer{% elif art.data_json.summary.consistency_color == 'warning' %}draft{% else %}danger{% endif %}" style="font-size:.7rem; padding:4px 8px;">
+                                    СХОДСТВО: {{ art.data_json.summary.similarity_score }}%
+                                  </div>
+                                  <div class="badge badge--owner" style="font-size:.7rem; padding:4px 8px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);">
+                                    НАДЕЖДНОСТ: {{ art.data_json.summary.confidence }}
+                                  </div>
+                                {% else %}
+                                  <div class="badge badge--{% if art.data_json.summary.suspicion_level == 'Няма' or art.data_json.summary.suspicion_level == 'НИСКО' or art.data_json.summary.suspicion_level == 'Ниско' %}viewer{% elif art.data_json.summary.suspicion_level == 'Средно' or art.data_json.summary.suspicion_level == 'СРЕДНО' %}draft{% else %}danger{% endif %}" style="font-size:.7rem; padding:4px 8px;">
+                                    ПОДОЗРЕНИЕ: {{ art.data_json.summary.suspicion_level|default:"НЯМА"|upper }}
+                                  </div>
+                                {% endif %}
+                                {% if art.data_json.summary.layout_inconsistency_score is not None %}
+                                <div class="badge badge--{% if art.data_json.summary.layout_inconsistency_score < 20 %}viewer{% elif art.data_json.summary.layout_inconsistency_score < 60 %}draft{% else %}danger{% endif %}" style="font-size:.7rem; padding:4px 8px;">
+                                  LAYOUT SCORE: {{ art.data_json.summary.layout_inconsistency_score }}
+                                </div>
+                                {% endif %}
+                                {% if art.data_json.summary.title_page_like %}
+                                <div class="badge badge--owner" style="font-size:.7rem; padding:4px 8px; background:rgba(0,123,255,0.15); color:#007bff; border:1px solid rgba(0,123,255,0.3);">
+                                  💡 ТИТУЛНА / СПЕЦИФИЧНА СТРАНИЦА
+                                </div>
+                                {% endif %}
+                              </div>
+                              
+                              {% if art.data_json.confidence %}
+                                <div style="margin-bottom:1rem; display:flex; gap:.5rem; align-items:center;">
+                                  {% if art.data_json.confidence == 'high' %}
+                                    <span style="background:rgba(40, 167, 69, 0.2); color:#28a745; padding:2px 8px; border-radius:12px; font-size:.65rem; font-weight:700; text-transform:uppercase; border:1px solid rgba(40, 167, 69, 0.3);">
+                                      Надеждност: Висока
+                                    </span>
+                                  {% elif art.data_json.confidence == 'medium' %}
+                                    <span style="background:rgba(255, 193, 7, 0.2); color:#ffc107; padding:2px 8px; border-radius:12px; font-size:.65rem; font-weight:700; text-transform:uppercase; border:1px solid rgba(255, 193, 7, 0.3);">
+                                      Надеждност: Средна
+                                    </span>
+                                  {% else %}
+                                    <span style="background:rgba(220, 53, 69, 0.2); color:#dc3545; padding:2px 8px; border-radius:12px; font-size:.65rem; font-weight:700; text-transform:uppercase; border:1px solid rgba(220, 53, 69, 0.3);">
+                                      Надеждност: Ниска
+                                    </span>
+                                  {% endif %}
+                                  
+                                  {% if art.data_json.alignment_method %}
+                                    <span style="background:rgba(255,255,255,0.1); color:var(--color-muted); padding:2px 8px; border-radius:12px; font-size:.6rem; text-transform:lowercase; font-family:monospace;">
+                                      метод: {{ art.data_json.alignment_method }}
+                                    </span>
+                                  {% endif %}
+                                </div>
+                                
+                                {% if art.data_json.alignment_failed or art.data_json.confidence == 'low' %}
+                                  <div style="margin-bottom:1rem; background:rgba(220, 53, 69, 0.1); padding:.5rem .75rem; border-radius:4px; border-left:3px solid #dc3545;">
+                                    <div style="font-size:.7rem; color:#dc3545; font-weight:600;">
+                                      ⚠️ Локалното сравнение е деактивирано поради ниска надеждност на подравняването. 
+                                      Резултатите са само за визуална справка.
+                                    </div>
+                                  </div>
+                                {% endif %}
+                              {% endif %}
+
+                              {% if art.data_json.summary.reasons %}
+                                <div style="margin-bottom:1rem; background:rgba(255,255,255,0.03); padding:.75rem; border-radius:4px; border-left:3px solid var(--color-primary);">
+                                  <div style="font-size:.7rem; font-weight:600; text-transform:uppercase; margin-bottom:5px; color:var(--color-muted);">Обосновка на анализа:</div>
+                                  <ul style="margin:0; padding-left:1.2rem; font-size:.8rem; color:var(--color-text);">
+                                    {% for r in art.data_json.summary.reasons %}
+                                      <li style="margin-bottom:3px;">{{ r }}</li>
+                                    {% endfor %}
+                                  </ul>
+                                </div>
+                              {% elif art.data_json.summary.limitations %}
+                                <div style="margin-bottom:1rem; background:rgba(255,255,255,0.03); padding:.75rem; border-radius:4px; border-left:3px solid var(--color-primary);">
+                                  <div style="font-size:.7rem; font-weight:600; text-transform:uppercase; margin-bottom:5px; color:var(--color-muted);">Ограничения на анализа:</div>
+                                  <ul style="margin:0; padding-left:1.2rem; font-size:.75rem; color:var(--color-text);">
+                                    {% for r in art.data_json.summary.limitations %}
+                                      <li style="margin-bottom:3px;">{{ r }}</li>
+                                    {% endfor %}
+                                  </ul>
+                                  {% if art.data_json.summary.warnings %}
+                                    <div style="font-size:.7rem; font-weight:600; text-transform:uppercase; margin-top:10px; margin-bottom:5px; color:var(--color-warning);">⚠️ Технически предупреждения:</div>
+                                    <ul style="margin:0; padding-left:1.2rem; font-size:.75rem; color:var(--color-text);">
+                                      {% for w in art.data_json.summary.warnings %}
+                                        <li style="margin-bottom:3px; color:var(--color-warning);">{{ w }}</li>
+                                      {% endfor %}
+                                    </ul>
+                                  {% endif %}
+                                </div>
+                              {% else %}
+                                <p style="font-size:.75rem; color:var(--color-muted); margin-bottom:1rem;">{{ art.data_json.summary.quality_notes }}</p>
+                              {% endif %}
+                              
+                              {% for s in art.data_json.scores %}
+                                  {% if s.id == 'num_regions' and s.value == 0 %}
+                                    <div style="margin-bottom:1rem; background:rgba(40, 167, 69, 0.1); padding:.5rem .75rem; border-radius:4px; border-left:3px solid var(--color-owner);">
+                                      <div style="font-size:.75rem; font-weight:600; color:var(--color-owner);">✅ Няма локализирани региони → подозрение е ниско.</div>
+                                    </div>
+                                  {% endif %}
+                              {% endfor %}
+                              
+                              {% if art.data_json.summary.flags %}
+                                <div style="margin-bottom:1.5rem;">
+                                  <div style="font-size:.75rem; font-weight:600; text-transform:uppercase; margin-bottom:5px; color:var(--color-danger);">🚩 Засечени Флагове:</div>
+                                  <table style="width:100%; font-size:.75rem; border-collapse:collapse;">
+                                    {% for f in art.data_json.summary.flags %}
+                                      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                        <td style="padding:4px 0;"><span style="color:var(--color-danger); font-weight:700;">[{{ f.code }}]</span></td>
+                                        <td style="padding:4px 0;">{{ f.reason }}</td>
+                                      </tr>
+                                    {% endfor %}
+                                  </table>
+                                </div>
+                              {% endif %}
+                            {% endif %}
+
+                            <!-- Scores & Subscores -->
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-bottom:1.5rem;">
+                              {% if art.data_json.scores %}
+                                {% for s in art.data_json.scores %}
+                                  <div style="background:rgba(255,255,255,0.05); padding:.5rem; border-radius:4px; position:relative;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                                      <div style="font-size:.65rem; color:var(--color-muted); text-transform:uppercase;">
+                                        {% if s.label %}{{ s.label }}{% elif s.id %}{{ s.id }}{% else %}{{ s }}{% endif %}
+                                      </div>
+                                      {% if s.desc %}
+                                        <span class="tooltip-trigger">
+                                          ⓘ
+                                          <span class="tooltip-content">{{ s.desc }}</span>
+                                        </span>
+                                      {% endif %}
+                                    </div>
+                                    <div style="font-size:.9rem; font-weight:600; color:var(--color-primary);">
+                                      {% if s.value is not None %}{{ s.value }}{% else %}—{% endif %}
+                                    </div>
+                                  </div>
+                                {% endfor %}
+                              {% endif %}
+
+                              {% if art.data_json.subscores %}
+                                {% for key, value in art.data_json.subscores.items %}
+                                  <div style="background:rgba(255,153,0,0.05); padding:.5rem; border-radius:4px; position:relative;">
+                                    <div style="font-size:.6rem; color:var(--color-muted); text-transform:uppercase; margin-bottom:2px;">Аномалия: {{ key }}</div>
+                                    <div style="font-size:.9rem; font-weight:600; color:var(--color-warning);">{{ value }}</div>
+                                  </div>
+                                {% endfor %}
+                              {% endif %}
+
+                              {% if not art.data_json.scores and not art.data_json.subscores %}
+                                {% for key, value in art.data_json.items %}
+                                  {% if key != 'target' and key != 'reference' and key != 'summary' and key != 'regions' %}
+                                    <div style="background:rgba(255,255,255,0.05); padding:.5rem; border-radius:4px;">
+                                      <div style="font-size:.65rem; color:var(--color-muted); text-transform:uppercase;">{{ key }}</div>
+                                      <div style="font-size:.9rem; font-weight:600;">{{ value }}</div>
+                                    </div>
+                                  {% endif %}
+                                {% endfor %}
+                              {% endif %}
+                            </div>
+
+                            <!-- Target/Reference context -->
+                             {% if art.data_json.target %}
+                              <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:.75rem;">
+                                <div style="font-size:.7rem; color:var(--color-muted); text-transform:uppercase;">Обект:</div>
+                                <div style="font-size:.8rem;">{{ art.data_json.target.evidence_name }} (Стр. {{ art.data_json.target.page_index|add:1|default:"Всички" }})</div>
+                              </div>
+                            {% endif %}
+                            {% if art.data_json.reference %}
+                              <div style="margin-top:.5rem;">
+                                <div style="font-size:.7rem; color:var(--color-muted); text-transform:uppercase;">Еталон:</div>
+                                <div style="font-size:.8rem;">{{ art.data_json.reference.evidence_name }} (Стр. {{ art.data_json.reference.page_index|add:1 }})</div>
+                              </div>
+                            {% endif %}
+
+                            <!-- Handwriting Comparison Data -->
+                            {% if art.data_json.pipeline == 'handwriting_compare' %}
+                              <div style="margin-top:1.5rem;">
+                                <div style="font-size:.7rem; font-weight:600; text-transform:uppercase; margin-bottom:8px;">✍️ Детайлни Характеристики на Почерка</div>
+                                <div style="overflow-x:auto;">
+                                  <table style="width:100%; font-size:.7rem; border-collapse:collapse; background:rgba(0,0,0,0.2); border-radius:4px;">
+                                    <thead>
+                                      <tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-transform:uppercase; color:var(--color-muted); text-align:left;">
+                                        <th style="padding:6px;">Характеристика</th>
+                                        <th style="padding:6px;">Целеви</th>
+                                        <th style="padding:6px;">Еталон</th>
+                                        <th style="padding:6px;">Δ Разлика</th>
+                                        <th style="padding:6px;">Надеждност</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {% for f in art.data_json.features %}
+                                        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                          <td style="padding:6px; font-weight:600;">{{ f.metric }}</td>
+                                          <td style="padding:6px;">{{ f.target_val }}</td>
+                                          <td style="padding:6px;">{{ f.ref_val }}</td>
+                                          <td style="padding:6px; font-weight:600;">{{ f.diff_val }}</td>
+                                          <td style="padding:6px;">
+                                            <span class="badge badge--{{ f.reliability_color }}" style="font-size:0.6rem; padding: 2px 6px;">{{ f.reliability }}</span>
+                                          </td>
+                                        </tr>
+                                      {% endfor %}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                
+                                {% if art.data_json.summary.score_breakdown %}
+                                <div style="margin-top:1rem; display:flex; gap:1rem; flex-wrap:wrap; font-size:0.75rem;">
+                                  <div><span style="color:var(--color-muted);">Геометрия:</span> <strong>{{ art.data_json.summary.score_breakdown.geometry }}%</strong></div>
+                                  <div><span style="color:var(--color-muted);">Мастило:</span> <strong>{{ art.data_json.summary.score_breakdown.stroke }}%</strong></div>
+                                  <div><span style="color:var(--color-muted);">Компоненти:</span> <strong>{{ art.data_json.summary.score_breakdown.component }}%</strong></div>
+                                  <div><span style="color:var(--color-muted);">Сложност:</span> <strong>{{ art.data_json.summary.score_breakdown.shape }}%</strong></div>
+                                </div>
+                                {% endif %}
+                              </div>
+                            {% endif %}
+
+                            <!-- Specific regions for Layout Consistency -->
+                            {% if art.data_json.regions and art.data_json.pipeline != 'handwriting_compare' %}
+                              <div style="margin-top:1.5rem;">
+                                <div style="font-size:.7rem; font-weight:600; text-transform:uppercase; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                                  <span>🔎 Топ 5 Подозрителни Региона</span>
+                                  <span style="color:var(--color-muted);">{{ art.data_json.regions|length }} общо</span>
+                                </div>
+                                <div style="overflow-x:auto;">
+                                  <table style="width:100%; font-size:.7rem; border-collapse:collapse; background:rgba(0,0,0,0.2); border-radius:4px;">
+                                    <thead>
+                                      <tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-align:left;">
+                                        <th style="padding:6px;">№</th>
+                                        <th style="padding:6px;">Източник</th>
+                                        <th style="padding:6px;">Група (Тип)</th>
+                                        <th style="padding:6px;">Подтип</th>
+                                        <th style="padding:6px;">Score</th>
+                                        <th style="padding:6px;">Площ %</th>
+                                        <th style="padding:6px;">BBox (x,y,w,h)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {% for r in art.data_json.regions|slice:":5" %}
+                                        <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                                          <td style="padding:6px; color:var(--color-muted);">{{ forloop.counter }}</td>
+                                          <td style="padding:6px;">
+                                            <span class="badge badge--{% if r.source == 'noise' %}danger{% else %}owner{% endif %}" style="padding:1px 4px; font-size:.6rem;">{{ r.source|upper }}</span>
+                                          </td>
+                                          <td style="padding:6px;">
+                                            {% if r.group_type %}
+                                              <span style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:10px; font-size:.65rem; color:var(--color-text);">{{ r.group_type }}</span>
+                                            {% else %}
+                                              —
+                                            {% endif %}
+                                          </td>
+                                          <td style="padding:6px;">
+                                            {% if r.subtype %}
+                                              <span style="font-size:.65rem; color:var(--color-muted);">{{ r.subtype }}</span>
+                                            {% else %}
+                                              —
+                                            {% endif %}
+                                          </td>
+                                          <td style="padding:6px; font-weight:600; color:var(--color-primary);">{{ r.score }}</td>
+                                          <td style="padding:6px;">{{ r.area_ratio }}%</td>
+                                          <td style="padding:6px; font-family:monospace; color:var(--color-muted);">{{ r.bbox.x }},{{ r.bbox.y }},{{ r.bbox.w }},{{ r.bbox.h }}</td>
+                                        </tr>
+                                      {% endfor %}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            {% endif %}
+                          </div>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                    <!-- Overlays -->
+                    <div>
+                      <h4 style="margin-bottom:.75rem; display:flex; justify-content:space-between; align-items:center;">
+                        <span>Визуализации</span>
+                        <div style="font-size:.7rem; color:var(--color-muted);">Цъкнете за пълен размер</div>
+                      </h4>
+                      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:1rem;">
+                        {% for art in job.artifacts.all %}
+                          {% if art.kind == 'overlay' %}
+                            <div class="overlay-card" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:.5rem;">
+                              <div style="font-size:.7rem; font-weight:600; color:var(--color-muted); margin-bottom:.5rem; text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:.25rem;">
+                                {{ art.data_json.label|default:"Overlay" }}
+                              </div>
+                              <a href="{{ art.file.url }}" target="_blank" style="display:block; overflow:hidden; border-radius:4px;">
+                                <img src="{{ art.file.url }}" style="width:100%; transition:transform .3s; display:block;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                              </a>
+                            </div>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    </div>
+                  </div>
+                {% else %}
+                  <p style="color:var(--color-muted);">Задачата все още не е завършена...</p>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state__icon">🔍</div>
+        <p>Няма стартирани анализи. Използвайте API.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="tab-komentari" style="display:none;">
+  <div class="card">
+    <div class="card__header">
+      <span class="card__title">Коментари ({{ comments|length }})</span>
+    </div>
+
+    {% if can_edit %}
+    <div style="padding:1.25rem; border-bottom:1px solid var(--color-border); background:rgba(255,255,255,0.02);">
+      <form action="{% url 'case-comment-create' case.pk %}" method="post" style="display:flex; flex-direction:column; gap:.75rem;">
+        {% csrf_token %}
+        <textarea name="text" rows="3" class="form-control" placeholder="Напишете вашия коментар тук..." required style="resize:vertical;"></textarea>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="submit" class="btn btn--primary">Изпрати коментар</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
+    {% for comment in comments %}
+      <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--color-border);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+            <div style="font-size:.75rem; color:var(--color-muted); margin-bottom:.3rem;">
+              <strong style="color:var(--color-text);">{{ comment.author.get_username }}</strong>
+              · {{ comment.created_at|date:"d.m.Y H:i" }}
+            </div>
+            <p style="font-size:.9rem; line-height:1.4; white-space:pre-wrap; margin:0;">{{ comment.text }}</p>
+          </div>
+          {% if request.user == comment.author or request.user.is_staff %}
+          <form action="{% url 'case-comment-delete' case.pk comment.id %}" method="post" onsubmit="return confirm('Сигурни ли сте, че искате да изтриете този коментар?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--danger btn--sm" style="padding: 4px 8px; font-size: 0.7rem;" title="Изтрий коментар">
+              🗑️
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-state" style="padding:3rem 1rem;">
+        <div class="empty-state__icon">💬</div>
+        <p>Няма коментари. {% if can_edit %}Напишете първия коментар по-горе.{% endif %}</p>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if can_edit %}
+<div id="tab-spodelqne" style="display:none;">
+  <div class="card">
+    <div class="card__header">
+      <span class="card__title">Споделени линкове</span>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="btn btn--outline btn--sm" onclick="createAndCopyShareLink('viewer')" title="Създава и копира линк за наблюдения">🔗 Сподели (преглед)</button>
+        {% if is_owner %}
+        <button class="btn btn--primary btn--sm" onclick="createAndCopyShareLink('editor')" title="Създава и копира линк за редакция">✏️ Сподели (редакция)</button>
+        {% endif %}
+      </div>
+    </div>
+    <p class="alert alert--info" style="font-size:.8rem;margin-bottom:1rem;">
+      {% if is_owner %}Можете да създавате линкове-покана за Редактори и Наблюдатели.{% else %}Можете да създавате линкове-покана само за Наблюдатели.{% endif %}
+    </p>
+    {% if share_links %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Роля</th><th>URL</th><th>Използвания</th><th>Изтича</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for link in share_links %}
+            <tr>
+              <td>
+                {% if link.role == 'editor' %}
+                  <span class="badge badge--editor">Редактор</span>
+                {% else %}
+                  <span class="badge badge--viewer">Наблюдател</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="share-url">/share/{{ link.token }}/</span>
+              </td>
+              <td>{{ link.uses_count }}{% if link.max_uses %}/{{ link.max_uses }}{% endif %}</td>
+              <td>{{ link.expires_at|date:"d.m.Y"|default:"—" }}</td>
+              <td>
+                {% if is_owner %}
+                <button class="btn btn--danger btn--sm"
+                  onclick="revokeLink('{{ link.token }}')" title="Отмени линк">
+                  🚫 Отмени линк
+                </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state__icon">🔗</div>
+        <p>Няма активни споделени линкове.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+function showTab(id, el) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.tabs__link').forEach(l => l.classList.remove('active'));
+  document.getElementById('tab-' + id).style.display = '';
+  el.classList.add('active');
+  event.preventDefault();
+}
+function toggleReference(evId, isRef) {
+  fetch('/api/evidence/' + evId + '/set-reference/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken')
+    },
+    body: JSON.stringify({ is_reference: isRef })
+  }).then(r => r.json()).then(d => {
+    if (d.грешка) alert(d.грешка);
+    else location.reload();
+  });
+}
+function revokeLink(token) {
+  if (!confirm('Отмени ли линка?')) return;
+  fetch('/api/share-links/' + token + '/revoke/', {
+    method: 'POST',
+    headers: {'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json'}
+  }).then(r => r.json()).then(d => { alert(d['съобщение'] || JSON.stringify(d)); location.reload(); });
+}
+function getCookie(name) {
+  return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(name+'='))?.split('=')[1] || '';
+}
+function createAndCopyShareLink(role) {
+  fetch('/api/cases/{{ case.pk }}/share-links/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken')
+    },
+    body: JSON.stringify({ role: role })
+  })
+  .then(response => response.json().then(data => ({ status: response.status, data: data })))
+  .then(res => {
+    if (res.status >= 200 && res.status < 300 && res.data.share_url) {
+      navigator.clipboard.writeText(res.data.share_url).then(() => {
+        alert('Линкът за споделяне е създаден и копиран в клипборда!');
+        location.reload();
+      }).catch(err => {
+        alert('Линкът е създаден: ' + res.data.share_url + '\nМоля, копирайте го ръчно.');
+        location.reload();
+      });
+    } else {
+      alert('Грешка при създаване на линк: ' + (res.data.грешка || JSON.stringify(res.data)));
+    }
+  })
+  .catch(err => {
+    alert('Възникна грешка при мрежовата заявка: ' + err);
+  });
+}
+function launchAnalysis() {
+  const pipeline = document.getElementById('analysis-pipeline').value;
+  const evId = document.getElementById('analysis-target').value;
+  const pageIdx = document.getElementById('analysis-target-page').value;
+  
+  if (!evId) { alert('Изберете обект за анализ.'); return; }
+  
+  const data = {
+    evidence: parseInt(evId),
+    pipeline_name: pipeline,
+    params_json: {}
+  };
+  
+  if (pageIdx !== "") {
+    data.params_json.target_page_index = parseInt(pageIdx);
+  }
+
+  const useRoi = document.getElementById('enable-roi').checked;
+  if (useRoi) {
+    data.params_json.roi = {
+      x: parseInt(document.getElementById('roi-x').value || 0),
+      y: parseInt(document.getElementById('roi-y').value || 0),
+      w: parseInt(document.getElementById('roi-w').value || 100),
+      h: parseInt(document.getElementById('roi-h').value || 100)
+    };
+  }
+  
+  if (pipeline === 'compare_reference' || pipeline === 'handwriting_compare') {
+    const refId = document.getElementById('analysis-ref').value;
+    const refPageIdx = document.getElementById('analysis-ref-page').value;
+    if (!refId) { alert('Изберете еталон.'); return; }
+    
+    if (pipeline === 'compare_reference') {
+      data.params_json.reference_evidence_id = parseInt(refId);
+      data.params_json.reference_page_index = parseInt(refPageIdx);
+    } else {
+      data.params_json.compare_evidence_id = parseInt(refId);
+      data.params_json.compare_page_index = parseInt(refPageIdx);
+    }
+  }
+  
+  postJob(pipeline, data);
+}
+
+function updateFormFields() {
+  const pipe = document.getElementById('analysis-pipeline').value;
+  document.getElementById('ref-selection-box').style.display = (pipe === 'compare_reference' || pipe === 'handwriting_compare') ? 'block' : 'none';
+  document.getElementById('roi-box').style.display = (pipe === 'general_scan') ? 'block' : 'none';
+}
+
+function toggleRoiFields() {
+  const enabled = document.getElementById('enable-roi').checked;
+  const f = document.getElementById('roi-fields');
+  f.style.opacity = enabled ? '1' : '0.5';
+  f.style.pointerEvents = enabled ? 'auto' : 'none';
+}
+
+function updateTargetPages() {
+  const sel = document.getElementById('analysis-target');
+  const opt = sel.options[sel.selectedIndex];
+  const pageSel = document.getElementById('analysis-target-page');
+  const count = parseInt(opt.dataset.pages || 0);
+  const type = opt.dataset.type;
+  
+  pageSel.innerHTML = (type === 'pdf') ? '<option value="">-- Изберете страница --</option>' : '<option value="">Цяло изображение</option>';
+  for(let i=0; i<count; i++) {
+    pageSel.innerHTML += `<option value="${i}">Страница ${i+1}</option>`;
+  }
+}
+
+function updateRefPages() {
+  const sel = document.getElementById('analysis-ref');
+  const opt = sel.options[sel.selectedIndex];
+  const pageSel = document.getElementById('analysis-ref-page');
+  const count = parseInt(opt.dataset.pages || 0);
+  
+  pageSel.innerHTML = "";
+  for(let i=0; i<count; i++) {
+    pageSel.innerHTML += `<option value="${i}">Страница ${i+1}</option>`;
+  }
+  if (count === 0) pageSel.innerHTML = '<option value="0">Цяло изображение</option>';
+}
+
+function postJob(pipeline, data) {
+  data.case = parseInt("{{ case.pk }}");
+  fetch('/api/analysis/jobs/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(r => r.json()).then(d => {
+    if(d.id) { alert('Задачата е стартирана успешно!'); location.reload(); }
+    else { alert('Грешка: ' + JSON.stringify(d)); }
+  });
+}
+function toggleResult(pk) {
+  const r = document.getElementById('result-' + pk);
+  r.style.display = r.style.display === 'none' ? 'table-row' : 'none';
+}
+function toggleAnalysisForm() {
+  const p = document.getElementById('analysis-form-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function toggleUploadForm() {
+  const p = document.getElementById('upload-form-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+function uploadEvidence(event) {
+  event.preventDefault();
+  const fileInput = document.getElementById('ev-file');
+  const isRef = document.getElementById('ev-ref-tag').checked;
+  if (!fileInput.files[0]) return;
+
+  const formData = new FormData();
+  formData.append('case', parseInt("{{ case.pk }}"));
+  formData.append('file', fileInput.files[0]);
+  if (isRef) {
+    formData.append('tags', JSON.stringify(['reference']));
+  }
+
+  fetch('/api/evidence/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    body: formData
+  }).then(r => r.json()).then(d => {
+    if(d.id) { alert('Файлът е качен успешно!'); location.reload(); }
+    else { alert('Грешка: ' + JSON.stringify(d)); }
+  });
+}
+function toggleTag(evId, tag) {
+  fetch(`/api/evidence/${evId}/`, {
+    method: 'PATCH',
+    headers: { 
+      'X-CSRFToken': getCookie('csrftoken'),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ tags: [tag] }) // Simple toggle logic would be better but let's assume we set it
+  }).then(r => r.json()).then(d => {
+    alert('Промяната е записана!');
+    location.reload();
+  });
+}
+
+// Tooltip Click Handler for Mobile/Desktop
+document.addEventListener('click', function(e) {
+  const trigger = e.target.closest('.tooltip-trigger');
+  if (trigger) {
+    if (trigger.classList.contains('active')) {
+      trigger.classList.remove('active');
+    } else {
+      document.querySelectorAll('.tooltip-trigger.active').forEach(t => t.classList.remove('active'));
+      trigger.classList.add('active');
+    }
+  } else {
+    document.querySelectorAll('.tooltip-trigger.active').forEach(t => t.classList.remove('active'));
+  }
+});
+</script>
+{% endblock %}

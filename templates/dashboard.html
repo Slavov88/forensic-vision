@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Табло – ForensicVision{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-header__title">Табло</h1>
+    <p class="page-header__subtitle">Преглед на дейността в системата</p>
+  </div>
+  <a href="{% url 'case-list' %}" class="btn btn--primary">+ Нов кейс</a>
+</div>
+
+<!-- Stat Cards -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-card__label">Кейсове</div>
+    <div class="stat-card__value stat-card__value--primary">{{ total_cases }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label">Доказателства</div>
+    <div class="stat-card__value">{{ evidence_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label">Анализи</div>
+    <div class="stat-card__value">{{ analysis_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label">Артефакти</div>
+    <div class="stat-card__value">{{ artifact_count }}</div>
+  </div>
+</div>
+
+<!-- Recent activity -->
+<div class="card">
+  <div class="card__header">
+    <span class="card__title">Последни дейности</span>
+  </div>
+  
+  {% if recent_activities %}
+  <div class="activity-feed" style="display:flex; flex-direction:column;">
+    {% for activity in recent_activities %}
+    <div class="activity-item" style="display:flex; gap:1rem; padding:1rem; border-bottom:1px solid var(--color-border); align-items:center;">
+      <div class="activity-icon" style="font-size:1.5rem; width:2rem; text-align:center;">
+        {{ activity.icon }}
+      </div>
+      <div style="flex-grow:1;">
+        <div style="font-weight:600; font-size:0.95rem; color:{% if activity.severity == 'success' %}var(--color-success){% elif activity.severity == 'warn' %}var(--color-danger){% else %}var(--color-text){% endif %};">
+          {{ activity.title }}
+        </div>
+        <div style="font-size:0.8rem; color:var(--color-muted); margin-top:0.25rem;">
+          в кейс <a href="{% url 'case-detail' activity.case_id %}" style="color:var(--color-primary); text-decoration:none;">{{ activity.case_title }}</a> 
+          &nbsp;·&nbsp; от <strong>{{ activity.actor }}</strong>
+        </div>
+      </div>
+      <div style="font-size:0.8rem; color:var(--color-muted); text-align:right;">
+        {{ activity.timestamp|date:"d.m.Y" }}<br>
+        {{ activity.timestamp|time:"H:i" }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state__icon">🗂</div>
+    <p>Все още няма дейности. Създайте кейс или качете доказателство.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

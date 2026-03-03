@@ -1,0 +1,410 @@
+﻿{% extends "base.html" %}
+{% block title %}Методология - ForensicVision{% endblock %}
+
+{% block extra_head %}
+<!-- Optional extra head content -->
+{% endblock %}
+
+{% block content %}
+<div class="docs-page">
+  
+  <aside class="docs-sidebar">
+    <div class="docs-toc">
+      <h3 class="docs-toc__title">Съдържание</h3>
+      <ul class="docs-toc__list">
+        <li><a href="#intro">1. Какво е ForensicVision</a></li>
+        <li><a href="#architecture">2. Общ принцип на работа</a></li>
+        <li><a href="#data-objects">3. Данни и обекти</a></li>
+        <li><a href="#principles">4. Принципи за интерпретация</a></li>
+        <li><a href="#module-a">5. Модул A: General Scan</a></li>
+        <li><a href="#module-b">6. Модул B: Layout Consistency</a></li>
+        <li><a href="#module-c">7. Модул C: Compare to Reference</a></li>
+        <li><a href="#module-d">8. Модул D: Handwriting Compare</a></li>
+        <li><a href="#glossary">9. Речник на метриките</a></li>
+        <li><a href="#thresholds">10. Прагове и нива</a></li>
+        <li><a href="#scenarios">11. Примерни сценарии</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <article class="docs-content">
+    
+    <div class="page-header">
+      <h1 class="page-header__title">Методология и Документация</h1>
+      <p class="page-header__subtitle">
+        Подробно техническо ръководство за работата на алгоритмите в ForensicVision.
+      </p>
+    </div>
+
+    <section id="intro" class="docs-section">
+      <h2>1. Какво е ForensicVision</h2>
+      <p>
+        ForensicVision е платформа, специализирана в структурния и визуалния анализ на документи (най-често сканирани копия в PDF или изображения). 
+        Целта й е да предоставя бърз, евристичен (heuristic) анализ, който насочва вниманието на експертите към потенциално манипулирани или 
+        аномални зони в документа.
+      </p>
+      <div class="docs-callout docs-callout--warn">
+        <strong>Ограничение:</strong> Платформата <em>не</em> е самостоятелен съдебно-експертен инструмент, който може да доказва фалшификация. 
+        Тя предоставя сигнали (индикатори), които винаги изискват човешки контекст и интерпретация.
+      </div>
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="architecture" class="docs-section">
+      <h2>2. Общ принцип на работа</h2>
+      <p>
+        Анализът в системата преминава през няколко етапа (pipelines). Всяко качено доказателство се обработва чрез специализирани работни процеси в 
+        независим worker (<a href="https://docs.celeryq.dev/en/stable/" target="_blank" rel="noopener noreferrer">Celery <span class="icon">↗</span></a>).
+      </p>
+      
+      <!-- Flow Diagram SVG -->
+      <div class="docs-diagram">
+        <svg viewBox="0 0 800 150" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto; max-width: 800px; display: block; margin: 2rem auto;">
+          <style>
+            .box { fill: var(--color-surface); stroke: var(--color-border); stroke-width: 2; rx: 8; }
+            .text { fill: var(--color-text); font-family: Inter, sans-serif; font-size: 14px; font-weight: 500; text-anchor: middle; }
+            .subtext { fill: var(--color-muted); font-size: 11px; text-anchor: middle; }
+            .arrow { stroke: var(--color-primary); stroke-width: 2; marker-end: url(#arrowhead); }
+          </style>
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--color-primary)" />
+            </marker>
+          </defs>
+          <rect class="box" x="20" y="40" width="120" height="60" />
+          <text class="text" x="80" y="65">Upload</text>
+          <text class="subtext" x="80" y="85">PDF / Image</text>
+          <line class="arrow" x1="140" y1="70" x2="190" y2="70" />
+
+          <rect class="box" x="190" y="40" width="120" height="60" />
+          <text class="text" x="250" y="65">Pre-process</text>
+          <text class="subtext" x="250" y="85">Render / Resize</text>
+          <line class="arrow" x1="310" y1="70" x2="360" y2="70" />
+
+          <rect class="box" x="360" y="40" width="130" height="60" />
+          <text class="text" x="425" y="65">Analysis Pipeline</text>
+          <text class="subtext" x="425" y="85">Modules A, B, C, D</text>
+          <line class="arrow" x1="490" y1="70" x2="540" y2="70" />
+
+          <rect class="box" x="540" y="40" width="110" height="60" />
+          <text class="text" x="595" y="65">Artifacts</text>
+          <text class="subtext" x="595" y="85">Metrics / Overlays</text>
+          <line class="arrow" x1="650" y1="70" x2="700" y2="70" />
+          
+          <rect class="box" x="700" y="40" width="80" height="60" />
+          <text class="text" x="740" y="65">UI</text>
+          <text class="subtext" x="740" y="85">Interpretation</text>
+        </svg>
+      </div>
+      
+      <p>
+        Изображенията се зареждат директно. PDF файловете първо се рендират до изображения с висока резолюция използвайки биндинг към 
+        <code>pdfium</code> (<a href="https://pypdfium2.readthedocs.io/en/stable/" target="_blank" rel="noopener noreferrer">pypdfium2 <span class="icon">↗</span></a>).
+      </p>
+      
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="data-objects" class="docs-section">
+      <h2>3. Данни и обекти в системата</h2>
+      <ul>
+        <li><strong>Case (Кейс):</strong> Главният контейнер. Обединява доказателства, анализи, коментари и споделяния.</li>
+        <li><strong>Evidence (Доказателство):</strong> Каченият файл (снимка или PDF).</li>
+        <li><strong>EvidencePage:</strong> Ако доказателството е PDF, всяка отделна рендирана страница се пази тук.</li>
+        <li><strong>AnalysisJob:</strong> Конкретната заявка за анализ (напр. "Пуснете Pipeline C на страница 2 срещу страница 1").</li>
+        <li><strong>Artifact:</strong> Резултатите от анализа (генерираните JSON метрики или визуализации като heatmap overlays).</li>
+      </ul>
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="principles" class="docs-section">
+      <h2>4. Общи принципи за интерпретация</h2>
+      <p>Всички анализи в ForensicVision използват две основни концепции, които не трябва да се бъркат:</p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
+        <div class="docs-metric-card">
+          <h4>Score (Стойност / Сходство / Резултат)</h4>
+          <p>
+            Показва "колко голяма е аномалията" или "колко много си приличат два обекта". 
+            Например, висок Layout Inconsistency Score означава, че математически има големи структурни отклонения.
+          </p>
+        </div>
+        <div class="docs-metric-card">
+          <h4>Confidence (Надеждност)</h4>
+          <p>
+            Показва "колко сигурна е системата в сметнатия Score". 
+            Например, високо сходство може да има <strong>ниска надеждност</strong>, ако изображението е размазано или има твърде малко данни.
+          </p>
+        </div>
+      </div>
+      
+      <div class="docs-callout docs-callout--info" style="margin-top:1.5rem;">
+        <strong>Структурен сигнал vs Доказателство:</strong> Модулите откриват математически отклонения (напр. "Текстът тук е с 3 пиксела по-навътре"). Това е структурен сигнал. 
+        Дали това е фалшификация (copy-paste) или просто потребителят е натиснал два пъти Space, зависи от човешка интерпретация.
+      </div>
+      
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="module-a" class="docs-section">
+      <h2>5. Модул A: General Scan</h2>
+      <p>
+        Този модул представлява базов визуален и структурен скенер. Той сканира документа за общи аномалии в текстурата, рязкостта или шума.
+        <em>Не доказва самостоятелно подправка</em>.
+      </p>
+
+      <h3>Логика</h3>
+      <p>
+        Използва се <a href="https://docs.opencv.org/4.x/d7/d1b/group__imgproc__misc.html#gaa9e58d2860d4afa658ef70a9b1115576" target="_blank" rel="noopener noreferrer">Otsu's Thresholding <span class="icon">↗</span></a> и Adaptive Threshold, за да се отдели "фоновата хартия" от мастилото/текста (foreground).
+        След това се анализира структурната цялост само върху хартията, тъй като там фалшификациите често оставят "артефакти от компресия" или клониран шум.
+      </p>
+
+      <h3>Как се интерпретират резултатите</h3>
+      <ul>
+        <li><strong>blur_score:</strong> Дисперсията на <a href="https://docs.opencv.org/4.x/d5/d0f/tutorial_py_gradients.html" target="_blank" rel="noopener noreferrer">Laplacian филтъра <span class="icon">↗</span></a>. По-висока стойност = по-рязка снимка. Няма универсален праг "добро/лошо", тъй като зависи от резолюцията.</li>
+        <li><strong>suspicious_regions:</strong> Ако системата открие агрегации на необичаен шум в дадена локална зона (noise hotspots), тя добавя bounding box (BBox). Това е "зона за внимание".</li>
+      </ul>
+
+      <div class="docs-callout docs-callout--warn">
+        <strong>Ограничение:</strong> При лошо сканирани документи или снимки със сенки от осветление, Модул A ще отчита множество фалшиви аномалии.
+      </div>
+
+      <div class="docs-ref-list">
+        <h4>Източници и референции:</h4>
+        <div class="docs-ref-item">
+          <strong>OpenCV: Laplacian operator</strong> - Използва се за измерване на рязкост/размазване чрез second derivative. 
+          <a href="https://docs.opencv.org/4.x/d5/d0f/tutorial_py_gradients.html" target="_blank">документация ↗</a>
+        </div>
+        <div class="docs-ref-item">
+          <strong>OpenCV: Thresholding</strong> - Използвано за изолиране на бекграунда (Otsu / Adaptive). 
+          <a href="https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html" target="_blank">документация ↗</a>
+        </div>
+      </div>
+      
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="module-b" class="docs-section">
+      <h2>6. Модул B: Layout Consistency</h2>
+      <p>
+        Този модул прави проверка за <em>структурни несъответствия</em> в оформлението. Той търси "непасващ елемент в контекста".
+      </p>
+
+      <h3>Ключова концепция: Групиране спрямо контекст</h3>
+      <p>
+        Модулът локализира всички редове и блокове с текст чрез Morphological Operations (<a href="https://docs.opencv.org/4.x/d9/d61/tutorial_py_morphological_ops.html" target="_blank" rel="noopener noreferrer">Dilation/Erosion <span class="icon">↗</span></a>). 
+        След това всеки ред се класифицира в контекстуална група: <code>title</code>, <code>body</code>, <code>list</code>, <code>table</code>.
+        <br>
+        <strong>Важно:</strong> Отклоненията (в отстъп, разстояние, наклон) се смятат само <em>спрямо съответната група</em> (локално), а не глобално за цялата страница.
+      </p>
+
+      <h3>Метрики</h3>
+      <ul>
+        <li><strong>indent_anomaly:</strong> Отклонение по оста X спрямо локалната бас-линия на текущия параграф (capped max 35).</li>
+        <li><strong>spacing_anomaly:</strong> Анормално празно пространство между редовете, което не отговаря на околния текст (capped max 20).</li>
+        <li><strong>baseline_tilt:</strong> Ъгълът на реда (в градуси). Редактиран текст, лепнат накриво върху оригинала.</li>
+      </ul>
+
+      <div class="docs-callout docs-callout--info">
+        <strong>Ограничение:</strong> Тъй като Модул B е евристичен и не използва OCR, той интерпретира сложни таблици или плътно графично оформление често като аномалии. Затова аномалиите в <code>title</code> или <code>table</code> групите се облекчават или игнорират.
+      </div>
+      
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="module-c" class="docs-section">
+      <h2>7. Модул C: Compare to Reference</h2>
+      <p>
+        Модулът сравнява целеви документ/страница с чистия еталон (визуален диференциален анализ) и маркира местата, които са изтрити, добавени или разместени.
+      </p>
+
+      <!-- Flow Diagram SVG -->
+      <div class="docs-diagram">
+        <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto; max-width: 700px; display: block; margin: 2rem auto;">
+          <style>
+            .box { fill: var(--color-surface); stroke: var(--color-border); stroke-width: 2; rx: 8; }
+            .text { fill: var(--color-text); font-family: Inter, sans-serif; font-size: 14px; font-weight: 500; text-anchor: middle; }
+            .sub { fill: var(--color-muted); font-size: 11px; text-anchor: middle; }
+            .link { stroke: var(--color-primary); stroke-width: 2; marker-end: url(#arr); fill: transparent; }
+          </style>
+          <defs>
+            <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--color-primary)" />
+            </marker>
+          </defs>
+          
+          <rect class="box" x="20" y="20" width="120" height="60" />
+          <text class="text" x="80" y="45">Еталон</text>
+          <text class="sub" x="80" y="65">(Reference)</text>
+          
+          <rect class="box" x="20" y="120" width="120" height="60" />
+          <text class="text" x="80" y="145">Цел</text>
+          <text class="sub" x="80" y="165">(Target)</text>
+
+          <path class="link" d="M 140 50 Q 180 50 180 90 T 220 100" />
+          <path class="link" d="M 140 150 Q 180 150 180 110 T 220 100" />
+
+          <rect class="box" x="220" y="70" width="140" height="60" />
+          <text class="text" x="290" y="95">Alignment (ORB)</text>
+          <text class="sub" x="290" y="115">Homography Matrix</text>
+          
+          <line class="link" x1="360" y1="100" x2="410" y2="100" />
+
+          <rect class="box" x="410" y="70" width="120" height="60" />
+          <text class="text" x="470" y="95">Визуален Diff</text>
+          <text class="sub" x="470" y="115">(SSIM)</text>
+
+          <line class="link" x1="530" y1="100" x2="580" y2="100" />
+
+          <rect class="box" x="580" y="80" width="100" height="40" />
+          <text class="text" x="630" y="105">BBox Разлики</text>
+        </svg>
+      </div>
+
+      <h3>Етапи</h3>
+      <ol>
+        <li>
+          <strong>Подравняване (Alignment):</strong> Изображенията се привеждат в единен мащаб и се подравняват чрез 
+          <a href="https://docs.opencv.org/4.x/db/d95/classcv_1_1ORB.html" target="_blank" rel="noopener noreferrer">ORB features <span class="icon">↗</span></a> 
+          и <a href="https://docs.opencv.org/4.x/d1/de0/tutorial_py_feature_homography.html" target="_blank" rel="noopener noreferrer">RANSAC <span class="icon">↗</span></a> алгоритъм за намиране на Хомография.
+        </li>
+        <li>
+          <strong>Диференциално изчисление:</strong> Генерира се разлика чрез 
+          <a href="https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity" target="_blank" rel="noopener noreferrer">SSIM (Structural Similarity Index) <span class="icon">↗</span></a>.
+        </li>
+        <li>
+          <strong>Филтрация:</strong> Шумовите пиксели се премахват и се извличат конкретните контури (разлики).
+        </li>
+      </ol>
+
+      <div class="docs-callout docs-callout--warn">
+        <strong>Ограничение:</strong> Ако `confidence = low`, това означава, че RANSAC подравняването се е провалило. В такъв случай SSIM diff-ването не генерира BBoxes, защото цялата страница ще бъде отчетена като "една голяма разлика".
+      </div>
+
+      <div class="docs-ref-list">
+        <h4>Източници и референции:</h4>
+        <div class="docs-ref-item">
+          <strong>OpenCV: Feature Matching & Homography (RANSAC)</strong> - Фундаментален метод за подравняване на две изображения с различни мащаби.
+          <a href="https://docs.opencv.org/4.x/d1/de0/tutorial_py_feature_homography.html" target="_blank">документация ↗</a>
+        </div>
+        <div class="docs-ref-item">
+          <strong>scikit-image: SSIM</strong> - Измерва приликата в структурата на изображението, възприемана от човешкото око (Wang et al., 2004).
+          <a href="https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity" target="_blank">документация ↗</a>
+        </div>
+      </div>
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="module-d" class="docs-section">
+      <h2>8. Модул D: Handwriting Compare</h2>
+      <p>
+        Този модул извлича структурни ръкописни характеристики на зададени зони на интерес (ROI) и ги сравнява. 
+        Основната метрика е <strong>сходство (similarity_score)</strong>. Не се твърди 100% категоричност дали авторът е идентичен.
+      </p>
+
+      <h3>Характеристики (Features)</h3>
+      <ul>
+        <li><strong>Наклон (Slant):</strong> Статистически среден ъгъл на вертикалните черти.</li>
+        <li><strong>Ъгъл на писане (Baseline):</strong> Изчислява се чрез хоризонтална проекция (Horizontal Projection Profile).</li>
+        <li><strong>Плътност на мастилото (Stroke density):</strong> Съотношението на черните пиксели спрямо общия BBox на обектите.</li>
+        <li><strong>Сложност (Contour complexity):</strong> Периметър върху площ на контура.</li>
+      </ul>
+
+      <p>Всяка от горепосочените характеристики има собствена вътрешна надеждност (feature reliability). Ако в текста няма достатъчно данни, за да се извлече базовата линия, стойността става "N/A" и не участва в крайния Score.</p>
+
+      <div class="docs-ref-list">
+        <h4>Източници и референции:</h4>
+        <div class="docs-ref-item">
+          <strong>OpenCV: Contours & Bounding Rects</strong> - Извличане на индивидуални букви/елементи.
+          <a href="https://docs.opencv.org/4.x/d3/d05/tutorial_py_table_of_contents_contours.html" target="_blank">документация ↗</a>
+        </div>
+        <div class="docs-ref-item">
+          <strong>SciPy / NumPy: Histogram analysis</strong> - Използвано за изчисляване на медианата и IQR на наклоните.
+          <a href="https://numpy.org/doc/stable/reference/generated/numpy.histogram.html" target="_blank">документация ↗</a>
+        </div>
+      </div>
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="glossary" class="docs-section">
+      <h2>9. Общ речник на метриките</h2>
+      <table style="width:100%; border-collapse:collapse; margin-top:1rem; font-size:0.95rem;">
+        <thead style="background:var(--color-surface); text-align:left; border-bottom:2px solid var(--color-border);">
+          <tr>
+            <th style="padding:0.75rem;">Метрика</th>
+            <th style="padding:0.75rem;">Модул</th>
+            <th style="padding:0.75rem;">Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--color-border);">
+            <td style="padding:0.75rem;"><strong>blur_score</strong></td>
+            <td style="padding:0.75rem;">A</td>
+            <td style="padding:0.75rem;">Дисперсия на Laplacian. Висока стойност = високо качество на фокус. Ниска = размазано.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--color-border);">
+            <td style="padding:0.75rem;"><strong>layout_inconsistency_score</strong></td>
+            <td style="padding:0.75rem;">B</td>
+            <td style="padding:0.75rem;">Консолидиран резултат (0-100) от отклонения в разстояния, отстъпи и ъгли. >60 е ВИСОКО подозрение.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--color-border);">
+            <td style="padding:0.75rem;"><strong>ssim_score</strong></td>
+            <td style="padding:0.75rem;">C</td>
+            <td style="padding:0.75rem;">1.0 = идентични, 0.0 = напълно различни. Обикновено сканирани идентични страници варират 0.85-0.95 заради хартиен шум.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--color-border);">
+            <td style="padding:0.75rem;"><strong>alignment_confidence</strong></td>
+            <td style="padding:0.75rem;">C</td>
+            <td style="padding:0.75rem;">Броят на Inliers (потвърдени съвпадащи точки) в ORB/RANSAC подравняването.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--color-border);">
+            <td style="padding:0.75rem;"><strong>handwriting_similarity_score</strong></td>
+            <td style="padding:0.75rem;">D</td>
+            <td style="padding:0.75rem;">Сходство от 0 до 100. Използва weighted difference на метриките за наклон, плътност и височина.</td>
+          </tr>
+        </tbody>
+      </table>
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="thresholds" class="docs-section">
+      <h2>10. Прагове и логика за нива</h2>
+      <p>Оценките в платформата често се категоризират като `LOW`, `MEDIUM` или `HIGH` въз основа на евристични прагове (heuristics):</p>
+      <ul>
+        <li>
+          <strong>Подозрение (Suspicion):</strong> Зависи от комбинирани сигнали. Модул B ще вдигне "ВИСОКО" подозрение само ако има отклонение и в отстъпа (indent), и в празнотата (spacing) <em>в един и същи локален контекст</em> на body текст.
+        </li>
+        <li>
+          <strong>Надеждност (Confidence):</strong> Зависи от обема на данните. В Модул D, "ВИСОКА" надеждност изисква открити поне 30 букви (components) и стабилна сегментация.
+        </li>
+      </ul>
+      <a href="#" class="docs-top-link">↑ Нагоре</a>
+    </section>
+
+    <section id="scenarios" class="docs-section">
+      <h2>11. Примерни сценарии за практична интерпретация</h2>
+      
+      <div class="docs-callout" style="border-left-color: var(--color-primary); background: rgba(33,150,243,0.05);">
+        <strong>Пример 1:</strong> Модул A показва фонови аномалии, но Модул B е чист и Модул C (спрямо оригинала) няма червени зони.<br>
+        <em>Интерпретация:</em> Най-вероятно артефактът от Модул A е сянка от сканиране, гънка на хартията или артефакт на JPEG компресия. Не е фалшификация.
+      </div>
+
+      <div class="docs-callout" style="border-left-color: var(--color-danger); background: rgba(244,67,54,0.05); margin-top: 1rem;">
+        <strong>Пример 2:</strong> Модул B показва локална аномалия в `paragraph_first_line` отстъпа вътре в тялото и маркира BBox. Модул C потвърждава, че в същата зона има разлика (добавен текст) спрямо еталона.<br>
+        <em>Интерпретация:</em> Изключително силен сигнал за злонамерена намеса. Текстът е вмъкнат и математически нарушава подравняването на документа.
+      </div>
+
+      <div class="docs-callout" style="border-left-color: var(--color-success); background: rgba(76,175,80,0.05); margin-top: 1rem;">
+        <strong>Пример 3:</strong> Сравнявате ръкопис в Модул D. Показва 85% сходство, но надеждността е "MEDIUM". Едната метрика (baseline) е "N/A".<br>
+        <em>Интерпретация:</em> Тъй като текстът е в полета или отделни думи без редове, алгоритъмът не може да изчисли наклона на реда. Сходството е базирано само на плътност и форма. Изисква се детайлно експертно изследване.
+      </div>
+      
+      <div style="margin-top: 3rem; text-align: center;">
+        <a href="{% url 'dashboard' %}" class="btn btn--primary">⟶ Към Таблото</a>
+        <a href="{% url 'case-list' %}" class="btn btn--secondary" style="margin-left: 1rem;">Виж Кейсовете</a>
+      </div>
+      
+    </section>
+
+  </article>
+</div>
+{% endblock %}

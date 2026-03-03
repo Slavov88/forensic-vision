@@ -1,0 +1,117 @@
+{% load static %}<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ForensicVision{% endblock %}</title>
+  <meta name="description" content="Криминалистичен анализ на документи и изображения">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=1.1">
+  <script>
+    if (localStorage.getItem('theme') === 'light' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+      document.documentElement.classList.add('theme-light');
+    }
+  </script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+
+  <aside class="layout__sidebar" id="sidebar">
+    <nav class="nav">
+      <div class="nav__brand">
+        <a href="{% url 'dashboard' %}" class="nav__brand-logo">
+          <span class="icon">🔬</span>
+          ForensicVision
+        </a>
+      </div>
+
+      <ul class="nav__links">
+        <li>
+          <a href="{% url 'dashboard' %}"
+             class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+            <span class="nav-icon">📊</span> Табло
+          </a>
+        </li>
+        <li>
+          <a href="{% url 'case-list' %}"
+             class="{% if 'case' in request.resolver_match.url_name %}active{% endif %}">
+            <span class="nav-icon">📁</span> Кейсове
+          </a>
+        </li>
+        <li>
+          <a href="{% url 'methodology' %}"
+             class="{% if request.resolver_match.url_name == 'methodology' %}active{% endif %}">
+            <span class="nav-icon">📚</span> Методология
+          </a>
+        </li>
+      </ul>
+
+      <div class="nav__footer">
+        <button id="theme-toggle" class="btn btn--outline btn--sm" style="width:100%; justify-content:center; margin-bottom: 1rem;">
+          <span class="icon" id="theme-icon">🔆</span> Светла Тема
+        </button>
+        {% if user.is_authenticated %}
+          <div style="margin-bottom:.5rem;">👤 {{ user.get_username }}</div>
+          <a href="{% url 'logout' %}">Изход</a>
+        {% endif %}
+      </div>
+    </nav>
+  </aside>
+
+  <main class="layout__content">
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="alert alert--{% if msg.tags == 'error' %}danger{% elif msg.tags == 'success' %}success{% else %}info{% endif %}">
+          {{ msg }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
+
+<!-- Mobile sidebar toggle -->
+<script>
+  (function() {
+    const sidebar = document.getElementById('sidebar');
+    const btn = document.createElement('button');
+    btn.className = 'btn btn--ghost btn--sm';
+    btn.style.cssText = 'position:fixed;top:.75rem;left:.75rem;z-index:200;display:none;';
+    btn.textContent = '☰';
+    btn.addEventListener('click', () => sidebar.classList.toggle('open'));
+    document.body.appendChild(btn);
+    function check() {
+      btn.style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+    }
+    check();
+    window.addEventListener('resize', check);
+  })();
+
+  // Theme toggle logic
+  (function() {
+    const btn = document.getElementById('theme-toggle');
+    const icon = document.getElementById('theme-icon');
+    
+    function updateBtn() {
+      const isLight = document.documentElement.classList.contains('theme-light');
+      icon.textContent = isLight ? '🌙' : '🔆';
+      btn.innerHTML = `<span class="icon" id="theme-icon">${icon.textContent}</span> ${isLight ? 'Тъмна Тема' : 'Светла Тема'}`;
+    }
+    
+    if (btn) {
+      updateBtn();
+      btn.addEventListener('click', () => {
+        const isLight = document.documentElement.classList.toggle('theme-light');
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        updateBtn();
+      });
+    }
+  })();
+</script>
+{% block extra_body %}{% endblock %}
+</body>
+</html>

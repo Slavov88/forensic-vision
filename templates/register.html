@@ -1,0 +1,63 @@
+{% load static %}<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Регистрация – ForensicVision</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=1.1">
+  <script>
+    if (localStorage.getItem('theme') === 'light' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+      document.documentElement.classList.add('theme-light');
+    }
+  </script>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-box">
+    <div class="login-box__logo">
+      <div style="font-size:2.5rem;">🔬</div>
+      <h1>ForensicVision</h1>
+      <p>Създаване на нов профил</p>
+    </div>
+
+    {% if form.errors %}
+      <div class="alert alert--danger">Моля, коригирайте грешките по-долу.</div>
+    {% endif %}
+
+    <form method="post" id="register-form">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="form-group">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}
+            <div style="font-size: 0.75rem; color: var(--color-muted); margin-top: 0.25rem;">{{ field.help_text|safe }}</div>
+          {% endif %}
+          {% for error in field.errors %}
+            <div style="font-size: 0.8rem; color: var(--color-danger); margin-top: 0.25rem;">{{ error }}</div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+      
+      <button type="submit" class="btn btn--primary" style="width:100%;justify-content:center;margin-top:1rem;">
+        Регистрация
+      </button>
+    </form>
+    
+    <div style="text-align:center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--color-muted);">
+      Вече имате профил? <a href="{% url 'login' %}">Влезте тук</a>
+    </div>
+  </div>
+</div>
+<script>
+  // Add CSS classes to Django's default generic form inputs
+  document.querySelectorAll('input').forEach(input => {
+      if (input.type !== 'hidden' && input.type !== 'checkbox') {
+          input.classList.add('form-control');
+      }
+  });
+</script>
+</body>
+</html>

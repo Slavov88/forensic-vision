@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Невалиден линк – ForensicVision{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-header__title">Невалиден споделен линк</h1>
+</div>
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-state__icon">🚫</div>
+    {% if link.revoked %}
+      <p>Този линк е бил <strong>отменен</strong> от собственика на кейса.</p>
+    {% else %}
+      <p>Линкът е <strong>изтекъл</strong> или е достигнал максималния брой използвания.</p>
+    {% endif %}
+    <br>
+    <a href="{% url 'case-list' %}" class="btn btn--outline" style="margin-top:1rem;">← Към кейсовете</a>
+  </div>
+</div>
+{% endblock %}

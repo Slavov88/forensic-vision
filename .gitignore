@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+staticfiles/
+
+# Media (do not commit uploaded files)
+media/
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Docker
+*.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

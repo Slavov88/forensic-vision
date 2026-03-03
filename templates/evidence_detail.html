@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ evidence.original_file.name|slice:"15:" }} – Детайли Доказателство{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <h1 class="page-header__title" style="word-break: break-all;">{{ evidence.original_file.name }}</h1>
+    <p class="page-header__subtitle">
+      <a href="{% url 'case-detail' case.pk %}" style="text-decoration:none; color:var(--text-color);">← Към Кейс: {{ case.title }}</a>
+    </p>
+  </div>
+  <div style="display:flex; gap:0.5rem; align-items:center;">
+    {% if evidence.is_reference %}
+      <span class="badge badge--owner" style="font-size:0.8rem; padding:4px 8px;">ЕТАЛОН</span>
+    {% endif %}
+    <span class="badge badge--{% if evidence.type == 'pdf' %}draft{% else %}viewer{% endif %}" style="font-size:0.8rem; padding:4px 8px;">{{ evidence.type|upper }}</span>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns: 2fr 1fr; gap: 2rem; margin-top:2rem;">
+  
+  <!-- Left Column: Visual Preview -->
+  <div>
+    <h3 style="margin-top:0;">Визуализация</h3>
+    <div class="card" style="padding:1rem; min-height: 400px; display:flex; flex-direction:column; align-items:center; justify-content:center; background-color:var(--bg-lighter);">
+      {% if evidence.type == "image" %}
+        <img src="{{ evidence.original_file.url }}" alt="Preview" style="max-width:100%; max-height: 800px; border-radius: var(--radius); border: 1px solid var(--border-color);">
+      {% elif evidence.type == "pdf" %}
+        {% if pages %}
+          <div style="display:flex; flex-direction:column; gap:2rem; width:100%;">
+          {% for page in pages %}
+            <div style="width:100%; border:1px solid var(--border-color); border-radius:var(--radius); overflow:hidden; background:white;">
+              <div style="background-color:var(--border-color); padding:0.5rem; font-size:0.85rem; font-weight:600;">
+                Страница {{ page.page_index }}
+              </div>
+              <img src="{{ page.rendered_image.url }}" style="width:100%; display:block;">
+            </div>
+          {% endfor %}
+          </div>
+        {% else %}
+          <div style="color:var(--color-muted); text-align:center;">
+            В момента PDF файлът се обработва или не можа да бъде рендериран...
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right Column: Metadata & Actions -->
+  <div>
+    <h3 style="margin-top:0;">Метаданни & Действия</h3>
+    <div class="card" style="padding:1.5rem;">
+      <ul style="list-style:none; padding:0; margin:0 0 1.5rem 0; font-size: 0.95rem; line-height:1.6;">
+        <li style="margin-bottom:0.8rem;">
+          <strong style="display:block; font-size:0.8rem; color:var(--color-muted); text-transform:uppercase;">Качен от</strong>
+          {{ evidence.uploaded_by.username }}
+        </li>
+        <li style="margin-bottom:0.8rem;">
+          <strong style="display:block; font-size:0.8rem; color:var(--color-muted); text-transform:uppercase;">Качен на</strong>
+          {{ evidence.uploaded_at|date:"d M Y, H:i" }}
+        </li>
+        <li style="margin-bottom:0.8rem;">
+          <strong style="display:block; font-size:0.8rem; color:var(--color-muted); text-transform:uppercase;">SHA-256 (Кратък)</strong>
+          <span style="font-family:monospace; background:var(--bg-lighter); padding:2px 4px; border-radius:4px; font-size:0.85rem;">{{ evidence.sha256|slice:":16" }}…</span>
+        </li>
+        {% if evidence.type == "pdf" %}
+        <li style="margin-bottom:0.8rem;">
+          <strong style="display:block; font-size:0.8rem; color:var(--color-muted); text-transform:uppercase;">Брой страници</strong>
+          {{ pages|length }}
+        </li>
+        {% endif %}
+      </ul>
+
+      <div style="display:flex; flex-direction:column; gap:0.5rem; width:100%;">
+        <a href="{{ evidence.original_file.url }}" target="_blank" rel="noopener" class="btn btn--primary" style="text-align:center; display:block; width:100%; box-sizing:border-box;">
+          Отвори оригинален файл ↗
+        </a>
+        
+        {% if can_edit %}
+          <button class="btn btn--ghost" style="width:100%;" onclick="toggleReference('{{ evidence.pk }}', {% if evidence.is_reference %}false{% else %}true{% endif %})">
+            {% if evidence.is_reference %}➖ Премахни като еталон{% else %}➕ Задай като еталон{% endif %}
+          </button>
+        {% endif %}
+      </div>
+    </div>
+    
+    {% if analysis_jobs %}
+      <h3 style="margin-top:2rem;">Свързани анализи</h3>
+      <div style="display:flex; flex-direction:column; gap:1rem;">
+      {% for job in analysis_jobs %}
+        <a href="{% url 'case-detail' case.pk %}#tab-analysis" class="card" style="padding:1rem; text-decoration:none; color:inherit; display:block; transition: background-color 0.2s;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
+            <strong style="font-size:0.9rem;">{{ job.get_pipeline_name_display }}</strong>
+            <span class="badge badge--viewer" style="font-size:0.7rem;">{{ job.get_status_display }}</span>
+          </div>
+          <div style="font-size:0.8rem; color:var(--color-muted);">
+            Стартиран на: {{ job.created_at|date:"d M H:i" }}<br>
+            От: {{ job.created_by.username }}
+          </div>
+        </a>
+      {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+function getCookie(name) {
+  return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(name+'='))?.split('=')[1] || '';
+}
+
+function toggleReference(evId, isRef) {
+  fetch(`/api/evidence/${evId}/set-reference/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCookie('csrftoken')
+    },
+    body: JSON.stringify({ is_reference: isRef })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.грешка) alert(d.грешка);
+    else location.reload();
+  });
+}
+</script>
+{% endblock %}
