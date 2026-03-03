@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from decouple import config, Csv
 import dj_database_url
+from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -150,3 +151,10 @@ REST_FRAMEWORK = {
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# важно: project-level ./static да се включи в collectstatic
+STATICFILES_DIRS = [BASE_DIR / "static"]
