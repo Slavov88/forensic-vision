@@ -20,6 +20,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.conf import settings
+from analysis.tasks import run_analysis_job 
 
 from audit.models import AuditLog
 from core.models import (
@@ -309,6 +311,7 @@ class EvidenceViewSet(viewsets.ModelViewSet):
         return Response(data)
 
 
+ 
 
 class AnalysisJobViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AnalysisJobSerializer
@@ -326,7 +329,7 @@ class AnalysisJobViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
     def create(self, request, *args, **kwargs):
-        """Create and immediately queue a new analysis job."""
+        """Create and run (eager) or queue (celery) a new analysis job."""
         case_id = request.data.get("case")
         case = get_object_or_404(Case, pk=case_id)
         try:
@@ -336,12 +339,33 @@ class AnalysisJobViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = self.get_serializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        job = serializer.save()
-        AuditLog.log("analysis_job_created", actor=request.user, target=job,
-                     details={"pipeline": job.pipeline_name, "case_id": case.pk})
-        return Response(
-            self.get_serializer(job).data, status=status.HTTP_201_CREATED
+        job = serializer.save(created_by=request.user)  
+
+        AuditLog.log(
+            "analysis_job_created",
+            actor=request.user,
+            target=job,
+            details={"pipeline": job.pipeline_name, "case_id": case.pk, "job_id": job.pk},
         )
 
-    # Allow POST for job creation (ReadOnlyModelViewSet doesn't include it)
+        if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+            try:
+                run_analysis_job(job.id)  
+            except Exception as e:
+                job.status = "failed"
+                job.error_message = str(e)
+                job.save(update_fields=["status", "error_message"])
+                AuditLog.log(
+                    "analysis_job_failed",
+                    actor=request.user,
+                    target=job,
+                    details={"pipeline": job.pipeline_name, "case_id": case.pk, "error": str(e)},
+                )
+                return Response(self.get_serializer(job).data, status=status.HTTP_200_OK)
+        else:
+            run_analysis_job.delay(job.id)
+
+        job.refresh_from_db()
+        return Response(self.get_serializer(job).data, status=status.HTTP_201_CREATED)
+
     http_method_names = ["get", "post", "head", "options"]
