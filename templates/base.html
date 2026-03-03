@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}ForensicVision{% endblock %}</title>
   <meta name="description" content="Криминалистичен анализ на документи и изображения">
+ {% load static %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=1.1">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
   <script>
     if (localStorage.getItem('theme') === 'light' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: light)').matches)) {
       document.documentElement.classList.add('theme-light');

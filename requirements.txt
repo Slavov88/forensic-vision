@@ -14,3 +14,4 @@ scikit-image>=0.24.0
 opencv-python-headless>=4.10.0
 scipy>=1.13.0
 dj-database-url
+whitenoise
