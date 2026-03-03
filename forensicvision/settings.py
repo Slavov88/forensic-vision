@@ -6,6 +6,8 @@ via python-decouple so nothing sensitive ever lands in version control.
 import os
 from pathlib import Path
 from decouple import config, Csv
+import dj_database_url
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -71,17 +73,30 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "forensicvision.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME", default="forensicvision"),
-        "USER": config("DB_USER", default="forensicvision"),
-        "PASSWORD": config("DB_PASSWORD", default="forensicvision"),
-        "HOST": config("DB_HOST", default="db"),
-        "PORT": config("DB_PORT", default="5432"),
-    }
-}
 
+
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=int(os.getenv("CONN_MAX_AGE", "0")),
+            ssl_require=True,
+        )
+    }
+else:
+    # Fallback за локално docker-compose (ако ти трябва)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME", "forensicvision"),
+            "USER": os.getenv("DB_USER", "forensicvision"),
+            "PASSWORD": os.getenv("DB_PASSWORD", "forensicvision"),
+            "HOST": os.getenv("DB_HOST", "db"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+        }
+    }
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
